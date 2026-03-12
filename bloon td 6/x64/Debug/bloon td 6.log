@@ -1,0 +1,6 @@
+﻿  gamemanager.cpp
+C:\Users\KHU JUN ZHONG\source\repos\bloon td 6\bloon td 6\gamemanager.cpp(15,26): warning C4244: '=': conversion from 'double' to 'float', possible loss of data
+C:\Users\KHU JUN ZHONG\source\repos\bloon td 6\bloon td 6\gamemanager.cpp(78,16): warning C4267: 'initializing': conversion from 'size_t' to 'int', possible loss of data
+  bloon td 6.vcxproj -> C:\Users\KHU JUN ZHONG\source\repos\bloon td 6\x64\Debug\bloon td 6.exe
+  'pwsh.exe' is not recognized as an internal or external command,
+  operable program or batch file.
