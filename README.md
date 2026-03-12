@@ -5,4 +5,5 @@ All code was written by me (with AI assistance) for educational purposes.
 I do not own the "Bloons" trademark or assets.
 
 requirement : download vcpkg and raylib
+setting : using ISO C++ 27 standard
 
