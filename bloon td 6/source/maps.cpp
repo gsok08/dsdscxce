@@ -59,3 +59,30 @@ void Map::Draw() {
         }
     }
 }
+
+void Map::SaveToFile(std::string filename) {
+    std::ofstream file(filename);
+    if (file.is_open()) {
+        file << points.size() << "\n";
+        for (const auto& p : points) {
+            file << p.x << " " << p.y << "\n";
+        }
+        file.close();
+    }
+}
+
+bool Map::LoadFromFile(std::string filename) {
+    std::ifstream file(filename);
+    if (!file.is_open()) return false;
+
+    points.clear();
+    int count;
+    file >> count;
+    for (int i = 0; i < count; i++) {
+        Vector2 p;
+        file >> p.x >> p.y;
+        AddPoint(p);
+    }
+    file.close();
+    return true;
+}
