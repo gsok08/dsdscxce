@@ -16,6 +16,9 @@ public:
     UpgradePath path; // Current upgrade state
     std::vector<Effect> darts;
 
+    // Inside class Tower in towers.h
+    static bool IsPlacementValid(Vector2 pos, const std::vector<Tower>& existingTowers, Map& gameMap, Rectangle uiRect);
+
     Tower(Vector2 pos );
     void Update(std::vector<Bloon>& bloons, int &money);
     void Draw();

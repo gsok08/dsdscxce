@@ -21,7 +21,7 @@ public:
     // Constructor: Needs a starting position and a type
     Bloon(Vector2 startPos, BloonType type);
 
-    void Update(Map& gameMap); // Bloon follows the gameMap.points vector
+    void Update(Map& gameMap, float speed); // Bloon follows the gameMap.points vector
     void Draw();
     void TakeDamage(int damage, bool isMagic = false);
 };
