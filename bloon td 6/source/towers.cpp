@@ -1,6 +1,7 @@
 #include "towers.h"
 #include "raymath.h"
 #include "effects.h" // Ensure this matches your filename (Effect.h or effects.h)
+#include "maps.h"
 
 Tower::Tower(Vector2 pos) {
     position = pos;
@@ -9,6 +10,44 @@ Tower::Tower(Vector2 pos) {
     timer = 0;
     path = NONE; // Start as base tower
 }
+
+bool Tower::IsPlacementValid(Vector2 pos, const std::vector<Tower>& existingTowers, Map& gameMap, Rectangle uiRect) {
+    float towerRadius = 20.0f; // Collision size of the tower
+    float pathWidth = 30.0f;   // Should match DrawLineEx width in maps.cpp
+
+    // 1. Check against the Path
+    for (size_t i = 0; i < gameMap.points.size(); i++) {
+        if (i > 0) {
+            // Check if the click is too close to the line segment
+            // We use pathWidth/2 + towerRadius to give some "padding"
+            if (CheckCollisionPointLine(pos, gameMap.points[i - 1], gameMap.points[i], (int)(pathWidth / 2 + towerRadius))) {
+                return false;
+            }
+        }
+        // Also check the "Joints" (the circles at each point)
+        if (CheckCollisionCircles(pos, towerRadius, gameMap.points[i], pathWidth / 2)) {
+            return false;
+        }
+
+        
+    }
+
+    // 2. Check against existing Towers (Prevent Overlapping)
+    for (const auto& t : existingTowers) {
+        if (Vector2Distance(pos, t.position) < (towerRadius * 2)) {
+            return false;
+        }
+    }
+
+    if (CheckCollisionPointRec(pos, uiRect)) {
+        return false;
+    }
+
+    
+
+    return true;
+}
+
 
 // Helper for the UpgradeManager to detect clicks
 bool Tower::IsClicked(Vector2 mousePos) {

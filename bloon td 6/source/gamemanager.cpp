@@ -1,8 +1,57 @@
 #include "gamemanager.h"
 
-GameManager::GameManager() : money(200), lives(20), waveNumber(0), waveActive(false) {}
+GameManager::GameManager() : money(150), lives(1), waveNumber(0), waveActive(false) {}
 
-void GameManager::Update(Map& myMap) {
+void GameManager::Update(Map& myMap , GameState& currentState) {
+    Vector2 mPos = GetMousePosition();
+
+    if (lives < 1) {
+        currentState = GAMEOVER;
+    }
+
+    if (waveNumber >= 20 && !waveActive && bloonsToSpawn <= 0) {
+        currentState = VICTORY;
+    }
+
+    // 1. Handle Button Click (Toggle Mode)
+    if (IsMouseButtonPressed(MOUSE_LEFT_BUTTON)) {
+        if (CheckCollisionPointRec(mPos, buildButton)) {
+            placementMode = !placementMode; // Switch ON/OFF
+        }
+    }
+
+    // 2. Handle Tower Placement (Only if mode is ON)
+    if (placementMode && IsMouseButtonPressed(MOUSE_LEFT_BUTTON)) {
+        if (money >= 50) {
+            if (Tower::IsPlacementValid(mPos, towers, myMap, buildButton)) {
+                towers.push_back(Tower(mPos));
+                money -= 50;
+                placementMode = !placementMode;
+                // Optional: placementMode = false; // Turn off after one build
+            }
+        }
+    }
+
+    // 1. Toggle Speed Button
+    if (IsMouseButtonPressed(MOUSE_LEFT_BUTTON)) {
+        if (CheckCollisionPointRec(mPos, speedButton)) {
+            gameSpeed = (gameSpeed == 1.0f) ? 5.0f : 1.0f;
+        }
+    }
+
+    // 2. Apply Speed to Bloon Movement
+    for (auto& b : bloons) {
+        // Multiply the movement increment by gameSpeed
+        // If your bloon has a move function, pass gameSpeed into it
+        b.Update(myMap, gameSpeed);
+    }
+
+    // 3. Apply Speed to Towers (Cooldowns)
+    for (auto& t : towers) {
+        // Towers should reload 5x faster in fast mode
+        t.Update(bloons, gameSpeed);
+    }
+
     // 1. Wave Input
     if (IsKeyPressed(KEY_SPACE) && !waveActive) {
         waveActive = true;
@@ -58,7 +107,7 @@ void GameManager::Update(Map& myMap) {
     }
 
     // 3. Selection & Upgrade UI
-    if (IsMouseButtonPressed(MOUSE_LEFT_BUTTON)) {
+    if (!placementMode && IsMouseButtonPressed(MOUSE_LEFT_BUTTON)) {
         bool clicked = false;
         for (auto& t : towers) {
             if (t.IsClicked(GetMousePosition())) { ui.SelectTower(&t); clicked = true; break; }
@@ -66,11 +115,7 @@ void GameManager::Update(Map& myMap) {
         if (!clicked && !ui.IsMouseOver()) ui.CloseMenu();
     }
 
-    // 4. Building
-    if (IsMouseButtonPressed(MOUSE_RIGHT_BUTTON) && money >= 50) {
-        towers.push_back(Tower(GetMousePosition()));
-        money -= 50;
-    }
+    
 
     // 5. Update Entities
     ui.HandleInput(money);
@@ -90,7 +135,31 @@ void GameManager::Draw(Map& myMap) {
     for (auto& t : towers) t.Draw();
     ui.Draw();
 
+    Vector2 mPos = GetMousePosition();
+    bool canPlace = Tower::IsPlacementValid(mPos, towers, myMap, buildButton);
+
+    bool hover = CheckCollisionPointRec(GetMousePosition(), buildButton);
+    DrawRectangleRec(buildButton, placementMode ? GREEN : (hover ? LIGHTGRAY : GRAY));
+    DrawRectangleLinesEx(buildButton, 2, BLACK);
+    DrawText(placementMode ? "CANCEL" : "BUILD TOWER", (int)buildButton.x + 10, (int)buildButton.y + 12, 15, BLACK);
+    // Draw Speed Button
+    bool speedHover = CheckCollisionPointRec(GetMousePosition(), speedButton);
+    DrawRectangleRec(speedButton, gameSpeed > 1.0f ? ORANGE : (speedHover ? LIGHTGRAY : GRAY));
+    DrawRectangleLinesEx(speedButton, 2, BLACK);
+
+    const char* speedText = (gameSpeed > 1.0f) ? "SPEED: 5x" : "SPEED: 1x";
+    DrawText(speedText, (int)speedButton.x + 25, (int)speedButton.y + 12, 15, BLACK);
+
+    if (placementMode) {
+        Vector2 mPos = GetMousePosition();
+        bool canPlace = Tower::IsPlacementValid(mPos, towers, myMap, buildButton);
+
+        // Visual indicator that you are in build mode
+        DrawCircleV(mPos, 20, Fade(canPlace ? GREEN : RED, 0.4f));
+        DrawText("R-Click to Place", (int)mPos.x + 25, (int)mPos.y, 15, WHITE);
+    }
     // HUD
+
     DrawRectangle(0, 0, 800, 40, Fade(BLACK, 0.6f));
     DrawText(TextFormat("CASH: $%i", money), 20, 10, 20, GREEN);
     DrawText(TextFormat("LIVES: %i", lives), 200, 10, 20, RED);
