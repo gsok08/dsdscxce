@@ -44,8 +44,11 @@ void Bloon::TakeDamage(int damage, bool isMagic) {
     }
 }
 
-void Bloon::Update(Map& gameMap) {
+void Bloon::Update(Map& gameMap, float speed) {
     if (!active) return;
+
+    position.x += direction.x * baseSpeed * speedMultiplier;
+    position.y += direction.y * baseSpeed * speedMultiplier;
 
     // Safety Check: If there's no path or only 1 point, we can't move
     if (gameMap.points.size() < 2 || targetPointIndex >= gameMap.points.size()) {
