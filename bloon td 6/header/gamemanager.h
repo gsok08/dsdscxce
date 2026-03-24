@@ -5,6 +5,7 @@
 #include "towers.h"
 #include "upgrademanager.h"
 #include "maps.h"
+#include "account.h"
 
 enum GameState { MENU, BUILD, PLAY, VICTORY, GAMEOVER };
 
@@ -44,12 +45,11 @@ public:
     bool placementMode = false;
     Rectangle buildButton = { 650, 420, 130, 40 }; // Bottom right button
 
-    // Updates all logic (Input, Spawning, AI, Collisions)
-    void Update(Map& myMap, GameState& currentState);
-
-    // Renders everything in the game world and the UI
-    void Draw(Map& myMap);
+    // Added 'Vector2 mouse' to the parameters
+    void Update(Map& myMap, GameState& currentState, PlayerAccount& acc, Vector2 mouse);
+    void Draw(Map& myMap, Vector2 mouse);
 
     // Helper to reset wave variables
     void StartNextWave();
 };
+

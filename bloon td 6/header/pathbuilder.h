@@ -4,6 +4,6 @@
 
 class PathBuilder {
 public:
-    void Update(Map& myMap);
+    void Update(Map& myMap, Vector2 mouse);
     void Draw();
 };
