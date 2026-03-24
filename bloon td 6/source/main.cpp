@@ -1,7 +1,9 @@
 #include "raylib.h"
+#include "raymath.h"
 #include "maps.h"
 #include "pathbuilder.h"
 #include "gamemanager.h"
+#include "account.h"
 #include <string>
 #include <vector>
 
@@ -10,80 +12,103 @@ struct MapButton {
     std::string name;
 };
 
+// Helper to convert real window mouse position to our 400x240 virtual space
+Vector2 GetVirtualMouse(RenderTexture2D target, float scale) {
+    Vector2 mouse = GetMousePosition();
+    Vector2 vMouse = { 0 };
+    vMouse.x = (mouse.x - (GetScreenWidth() - (400 * scale)) * 0.5f) / scale;
+    vMouse.y = (mouse.y - (GetScreenHeight() - (240 * scale)) * 0.5f) / scale;
+    vMouse.x = Clamp(vMouse.x, 0, 400);
+    vMouse.y = Clamp(vMouse.y, 0, 240);
+    return vMouse;
+}
+
 int main() {
-    // 1. Initialization
-    InitWindow(800, 480, "Bloons TD - Custom Maps");
+    // 1. Initialization with Resizable Flags
+    SetConfigFlags(FLAG_WINDOW_RESIZABLE | FLAG_VSYNC_HINT);
+    InitWindow(800, 480, "Bloons TD - Flexible Edition"); // Startup size
+    SetWindowMinSize(400, 240);
     SetTargetFPS(60);
+
+    // Create the Virtual Canvas
+    RenderTexture2D canvas = LoadRenderTexture(400, 240);
+    SetTextureFilter(canvas.texture, TEXTURE_FILTER_BILINEAR);
+
+    PlayerAccount acc;
+    acc.Load();
 
     GameState state = MENU;
     Map myMap;
     PathBuilder builder;
     GameManager game;
 
-    std::string mapName = " "; // Default name for saving/loading
-    FilePathList files = { 0 };   // Raylib structure for folder scanning
+    std::string mapName = "";
+    FilePathList files = { 0 };
     std::vector<MapButton> mapButtons;
 
     while (!WindowShouldClose()) {
+        // Handle Fullscreen Toggle
+        if (IsKeyDown(KEY_LEFT_ALT) && IsKeyPressed(KEY_ENTER)) ToggleFullscreen();
+
+        // Calculate scaling factor for this frame
+        float scale = fminf((float)GetScreenWidth() / 400.0f, (float)GetScreenHeight() / 240.0f);
+        Vector2 mouse = GetVirtualMouse(canvas, scale);
+
         // --- 2. UPDATE LOGIC ---
         if (state == MENU) {
-            // Scan folder for .txt files if list is empty or R is pressed
             if (files.paths == NULL || IsKeyPressed(KEY_R)) {
                 UnloadDirectoryFiles(files);
-                files = LoadDirectoryFiles("."); // Scan current directory
+                files = LoadDirectoryFiles(".");
                 mapButtons.clear();
 
                 int count = 0;
                 for (unsigned int i = 0; i < files.count; i++) {
                     if (IsFileExtension(files.paths[i], ".txt")) {
                         std::string fName = GetFileName(files.paths[i]);
-                        // Position buttons on the left side
-                        mapButtons.push_back({ { 30, (float)(100 + (count * 35)), 200, 30 }, fName });
+                        // Define button area in virtual 400x240 space
+                        mapButtons.push_back({ { 15, (float)(60 + (count * 22)), 110, 20 }, fName });
                         count++;
                     }
                 }
             }
 
-            // Click detection for map selection
-            Vector2 mPos = GetMousePosition();
             for (auto& btn : mapButtons) {
-                if (CheckCollisionPointRec(mPos, btn.rect) && IsMouseButtonPressed(MOUSE_LEFT_BUTTON)) {
+                if (CheckCollisionPointRec(mouse, btn.rect) && IsMouseButtonPressed(MOUSE_LEFT_BUTTON)) {
                     myMap.LoadFromFile(btn.name);
-                    mapName = btn.name; // Set as active
+                    mapName = btn.name;
                 }
             }
 
-            if (IsKeyPressed(KEY_ONE)) {
-                myMap.Clear();
-                state = BUILD;
+            // Shop logic using virtual mouse
+            if (!acc.magicTowerUnlocked) {
+                Rectangle shopBtn = { 220, 180, 160, 35 };
+                if (CheckCollisionPointRec(mouse, shopBtn) && IsMouseButtonPressed(MOUSE_LEFT_BUTTON)) {
+                    if (acc.totalMoney >= 2000) {
+                        acc.totalMoney -= 2000;
+                        acc.magicTowerUnlocked = true;
+                        acc.Save();
+                    }
+                }
             }
-            // Only allow play if map is loaded and valid
-            if (IsKeyPressed(KEY_TWO) && myMap.points.size() > 1) {
-                state = PLAY;
-            }
+
+            if (IsKeyPressed(KEY_ONE)) { myMap.Clear(); state = BUILD; }
+            if (IsKeyPressed(KEY_TWO) && myMap.points.size() > 1) state = PLAY;
         }
         else if (state == BUILD) {
-            builder.Update(myMap);
+            // Note: builder.Update should be modified to accept 'mouse' instead of calling GetMousePosition()
+            builder.Update(myMap, mouse);
 
-            // Typing logic for naming the map
             int key = GetCharPressed();
             while (key > 0) {
-                if ((key >= 32) && (key <= 125) && (mapName.length() < 15)) {
-                    mapName += (char)key;
-                }
+                if ((key >= 32) && (key <= 125) && (mapName.length() < 15)) mapName += (char)key;
                 key = GetCharPressed();
             }
             if (IsKeyPressed(KEY_BACKSPACE) && mapName.length() > 0) mapName.pop_back();
 
-            // Save to file logic
             if (IsKeyPressed(KEY_S) && myMap.points.size() > 1) {
-                // Ensure filename ends in .txt
                 std::string savePath = mapName;
                 if (savePath.find(".txt") == std::string::npos) savePath += ".txt";
-
                 myMap.SaveToFile(savePath);
-
-                // Reset file list so it refreshes next time we enter menu
                 UnloadDirectoryFiles(files);
                 files.paths = NULL;
                 state = MENU;
@@ -91,79 +116,68 @@ int main() {
             if (IsKeyPressed(KEY_ENTER)) state = MENU;
         }
         else if (state == PLAY) {
-            game.Update(myMap, state);
+            game.Update(myMap, state, acc, mouse);
             if (IsKeyPressed(KEY_ESCAPE)) state = MENU;
         }
 
-        // --- 3. DRAWING LOGIC ---
-        BeginDrawing();
+        // --- 3. DRAWING TO CANVAS ---
+        BeginTextureMode(canvas);
         ClearBackground(DARKGRAY);
 
         if (state == GAMEOVER || state == VICTORY) {
-            DrawRectangle(0, 0, 800, 480, Fade(BLACK, 0.7f));
-            DrawText(state == GAMEOVER ? "DEFEAT" : "VICTORY", 300, 200, 40, state == GAMEOVER ? RED : GOLD);
-
-            DrawText("Press [R] to Restart", 320, 260, 20, RAYWHITE);
-            DrawText("Press [M] for Menu", 320, 290, 20, RAYWHITE);
-
-            if (IsKeyPressed(KEY_R)) {
-                game.Reset();
-                state = PLAY;
-            }
-            if (IsKeyPressed(KEY_M)) {
-                game.Reset();
-                state = MENU;
-            }
+            DrawRectangle(0, 0, 400, 240, Fade(BLACK, 0.8f));
+            Color titleColor = (state == GAMEOVER) ? RED : GOLD;
+            DrawText(state == GAMEOVER ? "DEFEAT" : "VICTORY", 140, 80, 30, titleColor);
+            DrawText("Press [R] to Restart | [M] Menu", 100, 130, 15, RAYWHITE);
         }
-
-        if (state == MENU) {
-            // UI Sidebar for Map List
-            DrawRectangle(20, 60, 230, 390, Fade(BLACK, 0.4f));
-            DrawText("MAP BROWSER", 40, 75, 20, GOLD);
-            DrawText("(Press R to Refresh)", 40, 425, 12, GRAY);
+        else if (state == MENU) {
+            DrawText(TextFormat("Balance: $%i", acc.totalMoney), 10, 10, 15, GOLD);
+            DrawRectangle(10, 30, 120, 200, Fade(BLACK, 0.4f));
+            DrawText("MAPS", 45, 40, 15, GOLD);
 
             for (auto& btn : mapButtons) {
-                bool isHover = CheckCollisionPointRec(GetMousePosition(), btn.rect);
+                bool isHover = CheckCollisionPointRec(mouse, btn.rect);
                 bool isSelected = (btn.name == mapName);
-
                 DrawRectangleRec(btn.rect, isHover ? LIGHTGRAY : (isSelected ? DARKGREEN : GRAY));
-                DrawRectangleLinesEx(btn.rect, 1, isSelected ? GREEN : BLACK);
-                DrawText(btn.name.c_str(), (int)btn.rect.x + 8, (int)btn.rect.y + 8, 15, isSelected ? WHITE : BLACK);
+                DrawText(btn.name.c_str(), (int)btn.rect.x + 5, (int)btn.rect.y + 3, 12, isSelected ? WHITE : BLACK);
             }
 
-            // Right Side Menu
-            DrawText("1. DRAW NEW MAP", 350, 180, 25, RAYWHITE);
-
-            Color playColor = (myMap.points.size() > 1) ? GREEN : RED;
-            DrawText("2. START GAME", 350, 230, 25, playColor);
-
-            DrawText(TextFormat("Active Map: %s", mapName.c_str()), 350, 265, 18, LIGHTGRAY);
-
-            if (myMap.points.size() <= 1) {
-                DrawRectangle(350, 300, 350, 40, Fade(MAROON, 0.3f));
-                DrawText("Error: Select a valid map to play!", 360, 310, 16, RED);
+            if (!acc.magicTowerUnlocked) {
+                Rectangle shopBtn = { 220, 180, 160, 35 };
+                DrawRectangleRec(shopBtn, CheckCollisionPointRec(mouse, shopBtn) ? PURPLE : DARKGRAY);
+                DrawText("UNLOCK MAGIC ($2000)", 230, 192, 10, WHITE);
             }
+
+            DrawText("1. DRAW NEW MAP", 180, 60, 18, RAYWHITE);
+            DrawText("2. START GAME", 180, 90, 18, (myMap.points.size() > 1 ? GREEN : RED));
+            DrawText(TextFormat("Map: %s", mapName.c_str()), 180, 115, 12, LIGHTGRAY);
         }
         else if (state == BUILD) {
             myMap.Draw();
             builder.Draw();
-
-            // Text Input Box for Saving
-            DrawRectangle(550, 20, 230, 110, Fade(BLACK, 0.7f));
-            DrawText("SAVE AS:", 560, 35, 15, GOLD);
-            DrawText(mapName.c_str(), 560, 60, 20, WHITE);
-            DrawRectangle(560, 85, 210, 2, GOLD); // Underline
-            DrawText("[S] Save | [Enter] Cancel", 560, 95, 12, GREEN);
+            DrawRectangle(260, 10, 130, 60, Fade(BLACK, 0.7f));
+            DrawText("SAVE AS:", 265, 15, 10, GOLD);
+            DrawText(mapName.c_str(), 265, 30, 15, WHITE);
+            DrawText("[S] Save | [Enter] Exit", 265, 50, 9, GREEN);
         }
         else if (state == PLAY) {
-            game.Draw(myMap);
+            game.Draw(myMap, mouse);
         }
+        EndTextureMode();
 
+        // --- 4. DRAW CANVAS TO SCREEN (SCALING) ---
+        BeginDrawing();
+        ClearBackground(BLACK); // Letterbox bars
+        DrawTexturePro(canvas.texture,
+            { 0, 0, (float)canvas.texture.width, (float)-canvas.texture.height },
+            { (GetScreenWidth() - (400 * scale)) * 0.5f, (GetScreenHeight() - (240 * scale)) * 0.5f, 400 * scale, 240 * scale },
+            { 0, 0 }, 0, WHITE);
         EndDrawing();
     }
 
-    // 4. Cleanup memory
+    UnloadRenderTexture(canvas);
     UnloadDirectoryFiles(files);
+    acc.Save();
     CloseWindow();
     return 0;
 }

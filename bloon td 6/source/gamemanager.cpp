@@ -1,8 +1,9 @@
 #include "gamemanager.h"
+#include "account.h"
 
 GameManager::GameManager() : money(150), lives(1), waveNumber(0), waveActive(false) {}
 
-void GameManager::Update(Map& myMap , GameState& currentState) {
+void GameManager::Update(Map& myMap , GameState& currentState, PlayerAccount& acc, Vector2 mouse) {
     Vector2 mPos = GetMousePosition();
 
     if (lives < 1) {
@@ -11,6 +12,20 @@ void GameManager::Update(Map& myMap , GameState& currentState) {
 
     if (waveNumber >= 20 && !waveActive && bloonsToSpawn <= 0) {
         currentState = VICTORY;
+    }
+
+    // Inside GameManager::Update when the game ends
+    if (currentState == VICTORY || currentState == GAMEOVER) {
+
+        // Logic: 50 coins per wave + bonus for Victory
+        int difficultyMultiplier = 1; // You can change this based on map
+        int reward = (waveNumber * 50) * difficultyMultiplier;
+
+        if (currentState == VICTORY) reward += 500; // Bonus for winning
+
+        // Add to the permanent account 
+        acc.totalMoney += reward;
+        acc.Save(); // Save immediately
     }
 
     // 1. Handle Button Click (Toggle Mode)
@@ -23,7 +38,7 @@ void GameManager::Update(Map& myMap , GameState& currentState) {
     // 2. Handle Tower Placement (Only if mode is ON)
     if (placementMode && IsMouseButtonPressed(MOUSE_LEFT_BUTTON)) {
         if (money >= 50) {
-            if (Tower::IsPlacementValid(mPos, towers, myMap, buildButton)) {
+            if (Tower::IsPlacementValid(mPos, towers, myMap, buildButton, speedButton)) {
                 towers.push_back(Tower(mPos));
                 money -= 50;
                 placementMode = !placementMode;
@@ -49,7 +64,7 @@ void GameManager::Update(Map& myMap , GameState& currentState) {
     // 3. Apply Speed to Towers (Cooldowns)
     for (auto& t : towers) {
         // Towers should reload 5x faster in fast mode
-        t.Update(bloons, gameSpeed);
+        t.Update(bloons, money, gameSpeed);
     }
 
     // 1. Wave Input
@@ -119,9 +134,9 @@ void GameManager::Update(Map& myMap , GameState& currentState) {
 
     // 5. Update Entities
     ui.HandleInput(money);
-    for (auto& t : towers) t.Update(bloons, money);
+    for (auto& t : towers) t.Update(bloons, money, gameSpeed);
     for (int i = bloons.size() - 1; i >= 0; i--) {
-        bloons[i].Update(myMap);
+        bloons[i].Update(myMap, gameSpeed);
         if (!bloons[i].active) {
             if (bloons[i].hp > 0) lives--; // Escaped!
             bloons.erase(bloons.begin() + i);
@@ -129,14 +144,13 @@ void GameManager::Update(Map& myMap , GameState& currentState) {
     }
 }
 
-void GameManager::Draw(Map& myMap) {
+void GameManager::Draw(Map& myMap, Vector2 mouse) {
     myMap.Draw();
     for (auto& b : bloons) b.Draw();
     for (auto& t : towers) t.Draw();
     ui.Draw();
 
-    Vector2 mPos = GetMousePosition();
-    bool canPlace = Tower::IsPlacementValid(mPos, towers, myMap, buildButton);
+    bool canPlace = Tower::IsPlacementValid(mouse, towers, myMap, buildButton,speedButton);
 
     bool hover = CheckCollisionPointRec(GetMousePosition(), buildButton);
     DrawRectangleRec(buildButton, placementMode ? GREEN : (hover ? LIGHTGRAY : GRAY));
@@ -151,16 +165,15 @@ void GameManager::Draw(Map& myMap) {
     DrawText(speedText, (int)speedButton.x + 25, (int)speedButton.y + 12, 15, BLACK);
 
     if (placementMode) {
-        Vector2 mPos = GetMousePosition();
-        bool canPlace = Tower::IsPlacementValid(mPos, towers, myMap, buildButton);
+        bool canPlace = Tower::IsPlacementValid(mouse, towers, myMap, buildButton, speedButton);
 
         // Visual indicator that you are in build mode
-        DrawCircleV(mPos, 20, Fade(canPlace ? GREEN : RED, 0.4f));
-        DrawText("R-Click to Place", (int)mPos.x + 25, (int)mPos.y, 15, WHITE);
+        DrawCircleV(mouse, 20, Fade(canPlace ? GREEN : RED, 0.4f));
+        DrawText("R-Click to Place", (int)mouse.x + 25, (int)mouse.y, 15, WHITE);
     }
     // HUD
 
-    DrawRectangle(0, 0, 800, 40, Fade(BLACK, 0.6f));
+    DrawRectangle(0, 0, 400, 25, Fade(BLACK, 0.6f));
     DrawText(TextFormat("CASH: $%i", money), 20, 10, 20, GREEN);
     DrawText(TextFormat("LIVES: %i", lives), 200, 10, 20, RED);
     DrawText(TextFormat("WAVE: %i", waveNumber), 380, 10, 20, GOLD);

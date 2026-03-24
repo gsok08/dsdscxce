@@ -1,8 +1,8 @@
 #include "pathbuilder.h"
 
-void PathBuilder::Update(Map& myMap) {
+void PathBuilder::Update(Map& myMap, Vector2 mouse) {
     if (IsMouseButtonPressed(MOUSE_LEFT_BUTTON)) {
-        myMap.AddPoint(GetMousePosition());
+        myMap.AddPoint(mouse);
     }
     if (IsKeyPressed(KEY_R)) {
         myMap.Clear();
